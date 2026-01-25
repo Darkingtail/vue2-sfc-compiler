@@ -1,0 +1,36 @@
+# Dependabot 配置
+# 自动检测依赖更新并创建 PR
+
+version: 2
+updates:
+  # npm 依赖更新
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"      # 每周检查一次
+      day: "monday"           # 周一检查
+      time: "09:00"           # 早上 9 点（UTC）
+    open-pull-requests-limit: 5  # 最多同时开 5 个 PR
+    commit-message:
+      prefix: "chore(deps)"   # commit 前缀，符合 conventional commits
+    labels:
+      - "dependencies"        # PR 自动添加标签
+    groups:
+      # 把小更新分组，减少 PR 数量
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # GitHub Actions 更新
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - "dependencies"
+      - "github-actions"

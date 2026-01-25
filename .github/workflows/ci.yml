@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  # PR 时触发
+  pull_request:
+    branches:
+      - main
+  # 非 main 分支 push 时也触发（方便自己测试）
+  push:
+    branches:
+      - '!main'
+
+# 同一个 PR 的新 push 会取消旧的运行
+concurrency:
+  group: ci-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 类型检查
+      - name: Type check
+        run: pnpm typecheck
+
+      # 构建测试
+      - name: Build
+        run: pnpm build

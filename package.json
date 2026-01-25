@@ -1,0 +1,58 @@
+{
+  "name": "vue2-sfc-compiler",
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "description": "Vue 2 SFC compiler with script setup, TypeScript, and style preprocessor support",
+  "author": "darkingtail",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nicepkg/vue2-sfc-compiler.git"
+  },
+  "homepage": "https://github.com/nicepkg/vue2-sfc-compiler#readme",
+  "bugs": {
+    "url": "https://github.com/nicepkg/vue2-sfc-compiler/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@vue/compiler-sfc": "^3.5.26",
+    "vue2-jsx-browser": "^0.1.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.26.0",
+    "@commitlint/cli": "^19.0.0",
+    "@commitlint/config-conventional": "^19.0.0",
+    "husky": "^9.0.0",
+    "semantic-release": "^24.0.0",
+    "@types/babel__core": "^7.20.5",
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.9.0"
+  },
+  "keywords": [
+    "vue2",
+    "sfc",
+    "compiler",
+    "script-setup",
+    "typescript"
+  ],
+  "license": "MIT"
+}
