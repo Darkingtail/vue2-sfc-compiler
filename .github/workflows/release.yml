@@ -1,9 +1,17 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  # 暂时禁用自动发布，稳定后可改回 push 触发
+  # push:
+  #   branches:
+  #     - main
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '试运行（不实际发布）'
+        required: false
+        default: false
+        type: boolean
 
 # 防止同时运行多个发布流程
 concurrency:
