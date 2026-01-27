@@ -1,16 +1,63 @@
 /**
  * UMD Transformer
- * Converts CommonJS module to UMD format for browser execution
+ * Converts ESM/CommonJS module to UMD format for browser execution
  */
 
 import type { UMDOptions } from '../types'
 
 /**
  * Default external modules mapping
- * Maps CommonJS require paths to global variable names
+ * Maps module paths to global variable names
  */
 const DEFAULT_EXTERNALS: Record<string, string> = {
   vue: 'Vue',
+}
+
+/**
+ * Parse ESM import statements and convert to variable declarations
+ * @param code - Source code with import statements
+ * @param externals - Module to global variable mapping
+ * @returns Object with cleaned code and variable declarations
+ */
+function convertImportsToVars(
+  code: string,
+  externals: Record<string, string>
+): { code: string; varDeclarations: string[] } {
+  const varDeclarations: string[] = []
+  let result = code
+
+  // Match: import { a, b as c } from 'module'
+  // Match: import Vue from 'vue'
+  // Match: import Vue, { ref, reactive } from 'vue'
+  const importRegex = /import\s+(?:(\w+)\s*,?\s*)?(?:\{\s*([^}]+)\s*\})?\s*from\s*['"]([^'"]+)['"]\s*;?/g
+
+  result = result.replace(importRegex, (_, defaultImport, namedImportsStr, moduleName) => {
+    const globalVar = externals[moduleName]
+    if (!globalVar) {
+      // Unknown module, keep as comment for debugging
+      return `// [UMD] Unknown module: ${moduleName}`
+    }
+
+    // Handle default import: import Vue from 'vue'
+    if (defaultImport) {
+      varDeclarations.push(`var ${defaultImport} = ${globalVar};`)
+    }
+
+    // Handle named imports: import { ref, reactive as r } from 'vue'
+    if (namedImportsStr) {
+      const namedImports = namedImportsStr.split(',').map((s: string) => s.trim())
+      for (const imp of namedImports) {
+        const [name, alias] = imp.split(/\s+as\s+/).map((s: string) => s.trim())
+        const varName = alias || name
+        // Vue 2.7 composition API is on Vue object directly
+        varDeclarations.push(`var ${varName} = ${globalVar}.${name};`)
+      }
+    }
+
+    return '' // Remove the import statement
+  })
+
+  return { code: result, varDeclarations }
 }
 
 /**
@@ -21,10 +68,12 @@ function cleanCommonJSBoilerplate(code: string): string {
   return code
     // Remove "use strict" directive
     .replace(/["']use strict["'];?\s*/g, '')
-    // Remove __esModule definition
-    .replace(/Object\.defineProperty\s*\(\s*exports\s*,\s*["']__esModule["']\s*,\s*\{\s*value\s*:\s*true\s*\}\s*\)\s*;?/g, '')
+    // Remove __esModule definition (multiple patterns)
+    .replace(/Object\.defineProperty\s*\(\s*exports\s*,\s*["']__esModule["']\s*,\s*\{[^}]*\}\s*\)\s*;?/g, '')
     // Remove exports.__esModule = true
     .replace(/exports\.__esModule\s*=\s*true\s*;?/g, '')
+    // Remove exports["default"] = void 0; or exports.default = void 0;
+    .replace(/exports(?:\["default"\]|\.default)\s*=\s*void\s+0\s*;?/g, '')
     // Trim whitespace
     .trim()
 }
@@ -49,7 +98,7 @@ function replaceRequires(code: string, externals: Record<string, string>): strin
 
 /**
  * Extract the default export from code
- * Handles ESM (export default), CJS (exports.default), and module.exports patterns
+ * Handles ESM (export default), CJS (exports.default, exports["default"]), and module.exports patterns
  */
 function extractExport(code: string): { code: string; exportVar: string } {
   // Check for ESM: export default __sfc__ pattern
@@ -60,11 +109,33 @@ function extractExport(code: string): { code: string; exportVar: string } {
     return { code: cleanedCode, exportVar }
   }
 
-  // Check for CJS: exports.default = __sfc__ pattern
-  const defaultExportMatch = code.match(/exports\.default\s*=\s*(\w+)\s*;?/)
+  // Check for CJS: exports["default"] = __sfc__ or exports.default = __sfc__
+  // Also handle: var _default = exports["default"] = __sfc__
+  // Also handle: exports["default"] = _default = __sfc__
+
+  // First, try to find the component variable (__sfc__ or similar)
+  const componentVarMatch = code.match(/(?:var|const|let)\s+(__sfc__)\s*=/)
+  if (componentVarMatch) {
+    const exportVar = componentVarMatch[1]
+    // Remove all export-related statements
+    let cleanedCode = code
+      // Remove: var _default = exports["default"] = ...
+      .replace(/(?:var|const|let)\s+\w+\s*=\s*exports(?:\["default"\]|\.default)\s*=\s*[^;]+;?/g, '')
+      // Remove: exports["default"] = _default = ...
+      .replace(/exports(?:\["default"\]|\.default)\s*=\s*\w+\s*=\s*[^;]+;?/g, '')
+      // Remove: exports["default"] = __sfc__
+      .replace(/exports(?:\["default"\]|\.default)\s*=\s*\w+\s*;?/g, '')
+    return { code: cleanedCode, exportVar }
+  }
+
+  // Fallback: try to extract from exports assignment
+  const defaultExportMatch = code.match(/exports(?:\.default|\["default"\])\s*=\s*(\w+)\s*;?/)
   if (defaultExportMatch) {
     const exportVar = defaultExportMatch[1]
-    const cleanedCode = code.replace(/exports\.default\s*=\s*\w+\s*;?/g, '')
+    let cleanedCode = code
+      .replace(/(?:var|const|let)\s+\w+\s*=\s*exports(?:\["default"\]|\.default)\s*=\s*[^;]+;?/g, '')
+      .replace(/exports(?:\["default"\]|\.default)\s*=\s*\w+\s*=\s*[^;]+;?/g, '')
+      .replace(/exports(?:\["default"\]|\.default)\s*=\s*\w+\s*;?/g, '')
     return { code: cleanedCode, exportVar }
   }
 
@@ -128,9 +199,23 @@ function generateCSSInjection(css: string, name: string): string {
 
 /**
  * Generate UMD wrapper
+ * @param code - Component code body
+ * @param exportVar - Variable name to export
+ * @param name - Component name for global registration
+ * @param css - Optional CSS to inject
+ * @param varDeclarations - Variable declarations from import conversion
  */
-function wrapInUMD(code: string, exportVar: string, name: string, css?: string): string {
+function wrapInUMD(
+  code: string,
+  exportVar: string,
+  name: string,
+  css?: string,
+  varDeclarations: string[] = []
+): string {
   const cssInjection = generateCSSInjection(css || '', name)
+  const varsBlock = varDeclarations.length > 0
+    ? '\n  ' + varDeclarations.join('\n  ') + '\n'
+    : ''
 
   return `(function (global, factory) {
   typeof exports === 'object' && typeof module !== 'undefined' ? module.exports = factory(require('vue')) :
@@ -138,7 +223,7 @@ function wrapInUMD(code: string, exportVar: string, name: string, css?: string):
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global["${name}"] = factory(global.Vue));
 })(this, (function (Vue) {
   'use strict';
-${cssInjection}
+${cssInjection}${varsBlock}
 ${code}
 
   return ${exportVar};
@@ -202,12 +287,16 @@ export function toUMD(
   // Step 1: Clean CommonJS boilerplate
   let code = cleanCommonJSBoilerplate(js)
 
-  // Step 2: Replace require() calls
+  // Step 2: Convert ESM imports to variable declarations
+  const { code: codeWithoutImports, varDeclarations } = convertImportsToVars(code, allExternals)
+  code = codeWithoutImports
+
+  // Step 3: Replace any remaining require() calls (for CommonJS input)
   code = replaceRequires(code, allExternals)
 
-  // Step 3: Extract export
+  // Step 4: Extract export
   const { code: bodyCode, exportVar } = extractExport(code)
 
-  // Step 4: Wrap in UMD (with CSS injection if provided)
-  return wrapInUMD(bodyCode.trim(), exportVar, name, css)
+  // Step 5: Wrap in UMD (with CSS injection and variable declarations)
+  return wrapInUMD(bodyCode.trim(), exportVar, name, css, varDeclarations)
 }

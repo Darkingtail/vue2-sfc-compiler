@@ -2,6 +2,8 @@
 
 Vue 2 单文件组件（SFC）编译器，支持 `<script setup>`、TypeScript、JSX 和样式预处理器。
 
+> **致谢**：本项目基于 Vue.js 团队的 [`@vue/compiler-sfc`](https://github.com/vuejs/core/tree/main/packages/compiler-sfc) 构建。感谢 Vue 团队提供了优秀的 SFC 编译基础设施，使得在浏览器环境编译 Vue 2 SFC 成为可能。
+
 ## 作用与目的
 
 将 Vue 2 SFC 源码编译为可执行的 JavaScript 和 CSS。核心能力：
@@ -10,7 +12,7 @@ Vue 2 单文件组件（SFC）编译器，支持 `<script setup>`、TypeScript�
 - **编译 Script**：支持 `<script setup>`、TypeScript、JSX
 - **处理模板**：将模板附加为字符串，由 Vue 运行时编译
 - **编译样式**：支持 scoped CSS、Less、SCSS/SASS
-- **输出格式**：CommonJS（默认）或 UMD
+- **输出格式**：ESM、CommonJS 或 UMD
 
 本包是环境无关的纯编译器，通过依赖注入支持 Node.js 和浏览器环境。
 
@@ -101,7 +103,29 @@ console.log(result.errors)  // 编译错误数组
 console.log(result.name)    // 组件名 "MyComponent"
 ```
 
-### 3. 一步生成 UMD（推荐）
+### 3. 编译为 CommonJS（沙箱执行）
+
+```javascript
+// 编译 SFC 为 CommonJS 格式，用于沙箱/iframe 执行
+const result = await compiler.compileToCommonJS(sfcCode, 'MyComponent')
+
+if (result.errors.length === 0) {
+  // 在沙箱中执行，使用自定义 require()
+  const module = { exports: {} }
+  const require = (id) => {
+    if (id === 'vue') return Vue
+    // ... 处理其他依赖
+  }
+  new Function('require', 'module', 'exports', result.js)(require, module, module.exports)
+  const Component = module.exports.default
+}
+
+// result.js - CommonJS 代码
+// result.css - 编译后的 CSS
+// result.errors - 编译错误
+```
+
+### 4. 生成 UMD（Script 标签加载）
 
 ```javascript
 // 高级 API：直接从 SFC 生成完整 UMD 组件
@@ -112,7 +136,7 @@ if (result.errors.length > 0) {
   console.error('编译错误:', result.errors)
 }
 
-// result.code - UMD 代码
+// result.code - UMD 代码（含 CSS 自动注入）
 // result.name - 组件名
 // result.errors - 编译错误数组
 
@@ -120,7 +144,7 @@ if (result.errors.length > 0) {
 // 导出：window.MyButton
 ```
 
-### 4. 分步转换为 UMD
+### 5. 分步转换为 UMD
 
 ```javascript
 // 先编译，再转换（适合需要中间结果的场景）
@@ -177,12 +201,22 @@ SFC 源码
 │  输出: ESM + CSS                 │  CompileResult { js, css, errors, name }
 └──────────────────────────────────┘
     │
-    ▼
-┌──────────────────────────────────┐
-│  toUMD / compileToUMD            │  包装为 UMD 格式
-│  输出: UMD + CSS 自动注入        │  (function(global, factory){...})
-└──────────────────────────────────┘
+    ├─────────────────────────────────┐
+    ▼                                 ▼
+┌─────────────────────┐    ┌─────────────────────────┐
+│  compileToCommonJS  │    │  compileToUMD           │
+│  输出: CJS + CSS    │    │  输出: UMD + CSS        │
+│  (沙箱执行用)       │    │  (Script 标签加载)      │
+└─────────────────────┘    └─────────────────────────┘
 ```
+
+### 输出格式
+
+| 方法 | 格式 | 使用场景 |
+|------|------|----------|
+| `compileSFC` | ESM | 构建工具、打包器 |
+| `compileToCommonJS` | CommonJS | 沙箱/iframe 执行 |
+| `compileToUMD` | UMD | Script 标签加载 |
 
 ### compileSFC 内部流程
 
@@ -221,6 +255,21 @@ CompileResult { js, css, errors, name }
 |------|------|
 | `@vue/compiler-sfc` | 解析 SFC，编译 `<script setup>` |
 | `vue2-jsx-browser` | JSX 语法转换（Babel 插件） |
+
+### 为什么使用 Vue 3 的 @vue/compiler-sfc？
+
+本包使用 **Vue 3 的 `@vue/compiler-sfc`**（v3.5+）而不是 Vue 2.7 的版本，因为 Vue 2.7 的 compiler-sfc **无法在浏览器中运行**：
+
+| | Vue 2.7 compiler-sfc | Vue 3 compiler-sfc |
+|---|---|---|
+| **浏览器支持** | ❌ 仅 Node.js | ✅ 浏览器兼容 |
+| **模块格式** | 仅 CommonJS | ESM + CommonJS + ESM Browser |
+| **Node.js API** | 使用 `path`、`url` 等 | 浏览器安全 |
+| **依赖数量** | 40+ 可选依赖（consolidate.js） | 依赖极少 |
+
+**关键点**：Vue 3 编译器的输出 **完全兼容 Vue 2.7 运行时**。我们将模板作为字符串附加，由 Vue 2 运行时编译，确保 100% Vue 2 语法兼容。
+
+> **[查看详细说明](./docs/why-vue3-compiler.md)** 了解技术细节和尝试过的解决方案。
 
 ### 注入依赖（用户提供）
 

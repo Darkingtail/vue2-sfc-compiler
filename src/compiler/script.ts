@@ -67,17 +67,19 @@ export async function compileScriptBlock(
   if (hasSetup && source) {
     // For script setup, we need to re-parse the original source
     // to get the full descriptor that @vue/compiler-sfc needs
-    const parseResult = parse(source, {
+    // Vue 3 parse API: parse(code, options) returns { descriptor, errors }
+    const { descriptor: fullDescriptor, errors: parseErrors } = parse(source, {
       filename: descriptor.filename,
       sourceMap: false,
     })
 
-    if (parseResult.errors.length > 0) {
-      throw new Error(`SFC parse error: ${parseResult.errors.map(e => e.message).join(', ')}`)
+    if (parseErrors && parseErrors.length > 0) {
+      throw new Error(`SFC parse error: ${parseErrors.map((e: unknown) => typeof e === 'string' ? e : (e as { message: string }).message).join(', ')}`)
     }
 
     try {
-      const compiled = compileScript(parseResult.descriptor, {
+      // Vue 3 compileScript options
+      const compiled = compileScript(fullDescriptor, {
         babelParserPlugins: expressionPlugins as SFCScriptCompileOptions['babelParserPlugins'],
         id: scopeId || 'data-v-anonymous',
         inlineTemplate: false,

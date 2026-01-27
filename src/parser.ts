@@ -1,6 +1,6 @@
 /**
  * SFC Parser - Parse Vue Single File Components
- * Uses @vue/compiler-sfc (Vue 3's compiler, compatible with Vue 2 SFC syntax)
+ * Uses @vue/compiler-sfc from Vue 2.7 for native Vue 2 SFC support
  */
 
 import { parse as vueParse } from '@vue/compiler-sfc'
@@ -13,12 +13,13 @@ import type { SFCDescriptor } from './types'
  * @returns Parsed SFC descriptor
  */
 export function parseSFC(code: string, filename: string): SFCDescriptor {
+  // Vue 3 parse API: parse(code, options) returns { descriptor, errors }
   const { descriptor, errors } = vueParse(code, {
     filename,
     sourceMap: false,
   })
 
-  if (errors.length > 0) {
+  if (errors && errors.length > 0) {
     console.warn('SFC parse warnings:', errors)
   }
 
@@ -43,7 +44,7 @@ export function parseSFC(code: string, filename: string): SFCDescriptor {
           lang: descriptor.scriptSetup.lang,
         }
       : null,
-    styles: descriptor.styles.map((style) => ({
+    styles: descriptor.styles.map((style: { content: string; lang?: string; scoped?: boolean }) => ({
       content: style.content,
       lang: style.lang,
       scoped: style.scoped,

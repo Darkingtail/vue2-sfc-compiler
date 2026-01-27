@@ -4,6 +4,8 @@
 
 Vue 2 Single File Component (SFC) compiler with `<script setup>`, TypeScript, JSX and style preprocessor support.
 
+> **Acknowledgments**: This project is built on top of [`@vue/compiler-sfc`](https://github.com/vuejs/core/tree/main/packages/compiler-sfc) by the Vue.js team. Thanks to the Vue team for providing excellent SFC compilation infrastructure that makes browser-based Vue 2 SFC compilation possible.
+
 ## Purpose
 
 Compile Vue 2 SFC source code to executable JavaScript and CSS. Core capabilities:
@@ -12,7 +14,7 @@ Compile Vue 2 SFC source code to executable JavaScript and CSS. Core capabilitie
 - **Compile Script**: Support `<script setup>`, TypeScript, JSX
 - **Process Template**: Attach template as string for Vue runtime compilation
 - **Compile Styles**: Support scoped CSS, Less, SCSS/SASS
-- **Output Formats**: CommonJS (default) or UMD
+- **Output Formats**: ESM, CommonJS, or UMD
 
 This package is environment-agnostic, supporting both Node.js and browser environments through dependency injection.
 
@@ -91,7 +93,29 @@ console.log(result.errors)  // Compilation errors array
 console.log(result.name)    // Component name "MyComponent"
 ```
 
-### 3. Generate UMD in One Step (Recommended)
+### 3. Compile to CommonJS (For Sandbox Execution)
+
+```javascript
+// Compile SFC to CommonJS format for sandbox/iframe execution
+const result = await compiler.compileToCommonJS(sfcCode, 'MyComponent')
+
+if (result.errors.length === 0) {
+  // Execute in sandbox with custom require()
+  const module = { exports: {} }
+  const require = (id) => {
+    if (id === 'vue') return Vue
+    // ... handle other dependencies
+  }
+  new Function('require', 'module', 'exports', result.js)(require, module, module.exports)
+  const Component = module.exports.default
+}
+
+// result.js - CommonJS code
+// result.css - Compiled CSS
+// result.errors - Compilation errors
+```
+
+### 4. Generate UMD (For Script Tag Loading)
 
 ```javascript
 // High-level API: Generate complete UMD component from SFC
@@ -102,7 +126,7 @@ if (result.errors.length > 0) {
   console.error('Compilation errors:', result.errors)
 }
 
-// result.code - UMD code
+// result.code - UMD code (with CSS auto-injection)
 // result.name - Component name
 // result.errors - Compilation errors array
 
@@ -110,7 +134,7 @@ if (result.errors.length > 0) {
 // Export: window.MyButton
 ```
 
-### 4. Configure Style Preprocessors
+### 5. Configure Style Preprocessors
 
 ```javascript
 const compiler = createCompiler({
@@ -150,12 +174,22 @@ SFC Source
 │  Output: ESM + CSS               │  CompileResult { js, css, errors, name }
 └──────────────────────────────────┘
     │
-    ▼
-┌──────────────────────────────────┐
-│  toUMD / compileToUMD            │  Wrap as UMD format
-│  Output: UMD + CSS auto-inject   │  (function(global, factory){...})
-└──────────────────────────────────┘
+    ├─────────────────────────────────┐
+    ▼                                 ▼
+┌─────────────────────┐    ┌─────────────────────────┐
+│  compileToCommonJS  │    │  compileToUMD           │
+│  Output: CJS + CSS  │    │  Output: UMD + CSS      │
+│  (for sandbox)      │    │  (for script tag)       │
+└─────────────────────┘    └─────────────────────────┘
 ```
+
+### Output Formats
+
+| Method | Format | Use Case |
+|--------|--------|----------|
+| `compileSFC` | ESM | Build tools, bundlers |
+| `compileToCommonJS` | CommonJS | Sandbox/iframe execution |
+| `compileToUMD` | UMD | Script tag loading |
 
 ## Dependencies
 
@@ -165,6 +199,21 @@ SFC Source
 |------------|---------|
 | `@vue/compiler-sfc` | Parse SFC, compile `<script setup>` |
 | `vue2-jsx-browser` | JSX syntax transformation (Babel plugin) |
+
+### Why Vue 3's @vue/compiler-sfc?
+
+This package uses **Vue 3's `@vue/compiler-sfc`** (v3.5+) instead of Vue 2.7's version because Vue 2.7's compiler-sfc **cannot run in browsers**:
+
+| | Vue 2.7 compiler-sfc | Vue 3 compiler-sfc |
+|---|---|---|
+| **Browser Support** | ❌ Node.js only | ✅ Browser compatible |
+| **Module Format** | CommonJS only | ESM + CommonJS + ESM Browser |
+| **Node.js APIs** | Uses `path`, `url`, etc. | Browser-safe |
+| **Dependencies** | 40+ optional deps (consolidate.js) | Minimal deps |
+
+**Key Point**: Vue 3's compiler output is **fully compatible with Vue 2.7 runtime**. We attach templates as strings for Vue 2 runtime compilation, ensuring 100% Vue 2 syntax compatibility.
+
+> **[Read the detailed explanation](./docs/why-vue3-compiler.md)** for technical details and attempted solutions.
 
 ### Injected Dependencies (User Provided)
 

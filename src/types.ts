@@ -55,10 +55,10 @@ export interface CompilerOptions {
 }
 
 /**
- * Compilation result
+ * Compilation result (ES module format)
  */
 export interface CompileResult {
-  /** Compiled JavaScript code (CommonJS format) */
+  /** Compiled JavaScript code (ES module format) */
   js: string
   /** Compiled CSS (with scoped styles applied) */
   css: string
@@ -67,6 +67,22 @@ export interface CompileResult {
   /** Inferred component name from filename */
   name: string
   /** Scoped style ID (e.g., 'data-v-a1b2c3d4'), only present when has scoped styles */
+  scopeId?: string
+}
+
+/**
+ * CommonJS compilation result
+ */
+export interface CommonJSResult {
+  /** Compiled JavaScript code (CommonJS format) */
+  js: string
+  /** Compiled CSS (with scoped styles applied) */
+  css: string
+  /** Compilation errors */
+  errors: string[]
+  /** Inferred component name from filename */
+  name: string
+  /** Scoped style ID */
   scopeId?: string
 }
 
@@ -124,16 +140,29 @@ export interface SFCDescriptor {
  */
 export interface Compiler {
   /**
-   * Compile a Vue 2 SFC file
+   * Compile a Vue 2 SFC file to ES module format
    * @param code - SFC source code
    * @param name - Component name (e.g., 'MyButton')
    */
   compileSFC(code: string, name: string): CompileResult | Promise<CompileResult>
 
   /**
-   * Compile a JSX/TSX file
+   * Compile a JSX/TSX file to ES module format
    */
   compileJSX(code: string, filename?: string): CompileResult | Promise<CompileResult>
+
+  /**
+   * Compile a JSX/TSX file to CommonJS format (for sandbox execution)
+   */
+  compileJSXToCommonJS(code: string, filename?: string): CommonJSResult | Promise<CommonJSResult>
+
+  /**
+   * Compile SFC to CommonJS format (for sandbox execution)
+   * @param code - SFC source code
+   * @param name - Component name (e.g., 'MyButton')
+   * @returns CommonJS result with code, css, errors
+   */
+  compileToCommonJS(code: string, name: string): Promise<CommonJSResult>
 
   /**
    * Compile SFC directly to UMD format (high-level API)
