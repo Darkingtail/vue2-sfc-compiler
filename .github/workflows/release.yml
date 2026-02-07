@@ -1,17 +1,9 @@
 name: Release
 
 on:
-  # 暂时禁用自动发布，稳定后可改回 push 触发
-  # push:
-  #   branches:
-  #     - main
-  workflow_dispatch:
-    inputs:
-      dry_run:
-        description: '试运行（不实际发布）'
-        required: false
-        default: false
-        type: boolean
+  push:
+    tags:
+      - 'v*'
 
 # 防止同时运行多个发布流程
 concurrency:
@@ -23,23 +15,16 @@ jobs:
     name: Release
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # 创建 GitHub Release 和 tag
-      issues: write         # 评论 issue
-      pull-requests: write  # 评论 PR
-      id-token: write       # npm provenance (可选，增加包的可信度)
+      contents: write
+      id-token: write
 
     steps:
-      # 1. 检出代码
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # 获取完整 git 历史，semantic-release 需要分析 commits
 
-      # 2. 安装 pnpm
       - name: Install pnpm
         uses: pnpm/action-setup@v4
 
-      # 3. 安装 Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -47,17 +32,18 @@ jobs:
           cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
-      # 4. 安装依赖
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 5. 构建
       - name: Build
         run: pnpm build
 
-      # 6. 发布
-      - name: Release
-        run: npx semantic-release
+      - name: Publish to npm
+        run: pnpm publish --no-git-checks
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # GitHub 自动提供
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}        # 需要手动添加到 secrets
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
