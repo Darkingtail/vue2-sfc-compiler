@@ -40,6 +40,10 @@ jobs:
       - name: Type check
         run: pnpm typecheck
 
+      # 单元测试
+      - name: Test
+        run: pnpm test
+
       # 构建测试
       - name: Build
         run: pnpm build
